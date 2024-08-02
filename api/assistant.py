@@ -1,5 +1,3 @@
-from typing import List
-
 from fastapi import APIRouter, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
@@ -27,25 +25,23 @@ class ReviewResponse(BaseModel):
 
 
 # TODO 비동기로 최적화 하기
-@router.post("/pulls", response_model=List[ReviewResponse])
-def generate_pr_code_review(reviews: List[ReviewRequest]) -> List[ReviewResponse]:
+@router.post("/pulls", response_model=ReviewResponse)
+def generate_pr_code_review(review: ReviewRequest) -> ReviewResponse:
     try:
         # assistant_id가 가져오기
-        assistant = api_client.beta.assistants.retrieve(assistant_id=env.ASSISTANT_ID)
+         assistant =  api_client.beta.assistants.retrieve(assistant_id=env.ASSISTANT_ID)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error retrieving assistant: {e}")
 
-    review_results = []
-    for review in reviews:
-        result_code = get_review_code(review=review, assistant_id=assistant.id)
+    result_code = get_review_code(review=review, assistant_id=assistant.id)
 
-        review_results.append(ReviewResponse(branch=review.branch,
+    result = ReviewResponse(branch=review.branch,
                                              file_path=review.file_path,
-                                             code=result_code))
+                                             code=result_code)
 
     # swagger를 통한 테스트 편의상 일단 return 하도록 놔둠.
     # 추후에 ORM을 이용해서 DB를 저장할 지 고려중
-    return review_results
+    return result
 
 
 def get_review_code(review: ReviewRequest, assistant_id: str) -> str:
