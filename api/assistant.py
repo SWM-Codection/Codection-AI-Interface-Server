@@ -23,24 +23,35 @@ class ReviewResponse(BaseModel):
     file_path: str
     code: str
 
+class SampleCodeRequest(BaseModel):
+    code: str
+    comment: str
+
+class SampleCodeResponse(BaseModel):
+    sample_code: str
+
+@router.post("/sample", response_model=SampleCodeResponse)
+def generate_sample_code(request: SampleCodeRequest) -> SampleCodeResponse:
+
+    result_code = get_sample_code(review=request, assistant_id=env.SAMPLECODE_GENERATOR_ID)
+
+    result = SampleCodeResponse(sample_code=result_code)
+
+    # swagger를 통한 테스트 편의상 일단 return 하도록 놔둠.
+    # 추후에 ORM을 이용해서 DB를 저장할 지 고려중
+    return result
+
 
 # TODO 비동기로 최적화 하기
 @router.post("/pulls", response_model=ReviewResponse)
 def generate_pr_code_review(review: ReviewRequest) -> ReviewResponse:
-    try:
-        # assistant_id가 가져오기
-         assistant =  api_client.beta.assistants.retrieve(assistant_id=env.ASSISTANT_ID)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error retrieving assistant: {e}")
 
-    result_code = get_review_code(review=review, assistant_id=assistant.id)
+    result_code = get_review_code(review=review, assistant_id=env.PR_STATIC_ANALYSIS_ID)
 
     result = ReviewResponse(branch=review.branch,
                                              file_path=review.file_path,
                                              code=result_code)
 
-    # swagger를 통한 테스트 편의상 일단 return 하도록 놔둠.
-    # 추후에 ORM을 이용해서 DB를 저장할 지 고려중
     return result
 
 
@@ -71,3 +82,41 @@ def get_review_code(review: ReviewRequest, assistant_id: str) -> str:
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error processing review for {review.file_path}: {e}")
+
+
+def get_sample_code(review: SampleCodeRequest, assistant_id: str) -> str:
+    try:
+
+        thread = api_client.beta.threads.create()
+
+        api_client.beta.threads.messages.create(
+            thread_id=thread.id,
+            role="user",
+            content=f"""
+            <Comment>
+            {review.comment}
+            </Comment>
+            <Code>
+            ```
+            {review.code}
+            ```
+            </Code>
+            """)
+
+        # 실행
+        run = api_client.beta.threads.runs.create_and_poll(
+            assistant_id=assistant_id,
+            thread_id=thread.id
+        )
+
+        while run.status != "completed":
+            ...
+
+        messages = api_client.beta.threads.messages.list(
+            thread_id=thread.id,
+        )
+
+        return messages.data[0].content[0].text.value
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error Generating Sample Code: {e}")
