@@ -30,6 +30,10 @@ class SampleCodeRequest(BaseModel):
 class SampleCodeResponse(BaseModel):
     sample_code: str
 
+@router.get("/health-check")
+def health_check():
+    return 'ok'
+
 @router.post("/sample", response_model=SampleCodeResponse)
 def generate_sample_code(request: SampleCodeRequest) -> SampleCodeResponse:
 
