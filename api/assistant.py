@@ -1,9 +1,12 @@
 from fastapi import APIRouter, HTTPException
 from openai import OpenAI
 from pydantic import BaseModel
-
+import logging
 import env
 
+logging.basicConfig(encoding='utf-8', level=logging.DEBUG)
+
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/api")
 api_client = OpenAI(api_key=env.OPENAI_PRIVATE_KEY)
 
@@ -32,11 +35,12 @@ class SampleCodeResponse(BaseModel):
 
 @router.get("/health-check")
 def health_check():
+    log.debug('health_check has been called')
     return 'ok'
 
 @router.post("/sample", response_model=SampleCodeResponse)
 def generate_sample_code(request: SampleCodeRequest) -> SampleCodeResponse:
-
+    log.debug(f'generate_sample_code has been called with request: {request}')   
     result_code = get_sample_code(review=request, assistant_id=env.SAMPLECODE_GENERATOR_ID)
 
     result = SampleCodeResponse(sample_code=result_code)
@@ -49,7 +53,7 @@ def generate_sample_code(request: SampleCodeRequest) -> SampleCodeResponse:
 # TODO 비동기로 최적화 하기
 @router.post("/pulls", response_model=ReviewResponse)
 def generate_pr_code_review(review: ReviewRequest) -> ReviewResponse:
-
+    log.debug(f'generate_pr_code_review has been called with request: {review}')
     result_code = get_review_code(review=review, assistant_id=env.PR_STATIC_ANALYSIS_ID)
 
     result = ReviewResponse(branch=review.branch,
@@ -60,6 +64,7 @@ def generate_pr_code_review(review: ReviewRequest) -> ReviewResponse:
 
 
 def get_review_code(review: ReviewRequest, assistant_id: str) -> str:
+    log.debug(f'get_review_code has been called with request: {review}')
     try:
         # 매 파일마다 새로운 Thread를 생성함.
         thread = api_client.beta.threads.create()
@@ -85,10 +90,12 @@ def get_review_code(review: ReviewRequest, assistant_id: str) -> str:
         return messages.data[0].content[0].text.value
 
     except Exception as e:
+        log.warning(f'Error procesing review for {review.file_path}, e: {e}')
         raise HTTPException(status_code=500, detail=f"Error processing review for {review.file_path}: {e}")
 
 
 def get_sample_code(review: SampleCodeRequest, assistant_id: str) -> str:
+    log.debug(f'get_sample_code has been called with request: {review}')
     try:
 
         thread = api_client.beta.threads.create()
@@ -123,4 +130,5 @@ def get_sample_code(review: SampleCodeRequest, assistant_id: str) -> str:
         return messages.data[0].content[0].text.value
 
     except Exception as e:
+        log.warning(f'Error generating sample code: {e}')
         raise HTTPException(status_code=500, detail=f"Error Generating Sample Code: {e}")
